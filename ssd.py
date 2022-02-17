@@ -1,3 +1,25 @@
+ssd.py
+アクセスできるユーザー
+K
+システム プロパティ
+種類
+テキスト
+サイズ
+15 KB
+使用容量
+30 KB
+パス
+ssd_keras-new
+オーナー
+自分
+最終更新
+2021/07/09（自分）
+最終閲覧
+10:44（自分）
+作成日
+2021/06/18（Google Drive Web を使用）
+説明を追加
+閲覧者はダウンロード可
 """Keras implementation of SSD."""
 
 import keras.backend as K
@@ -9,9 +31,10 @@ from keras.layers import Flatten
 from keras.layers import GlobalAveragePooling2D
 from keras.layers import Input
 from keras.layers import MaxPooling2D
-from keras.layers import merge
+from keras.layers import concatenate
 from keras.layers import Reshape
 from keras.layers import ZeroPadding2D
+from keras.layers import Dropout, SpatialDropout2D, BatchNormalization
 from keras.models import Model
 
 from ssd_layers import Normalize
@@ -42,6 +65,10 @@ def SSD300(input_shape, num_classes=21):
                                    activation='relu',
                                    border_mode='same',
                                    name='conv1_2')(net['conv1_1'])
+    
+    # 追加                               
+    #net['conv1_2'] = SpatialDropout2D(0.25)(net['conv1_2'])
+    
     net['pool1'] = MaxPooling2D((2, 2), strides=(2, 2), border_mode='same',
                                 name='pool1')(net['conv1_2'])
     # Block 2
@@ -53,6 +80,10 @@ def SSD300(input_shape, num_classes=21):
                                    activation='relu',
                                    border_mode='same',
                                    name='conv2_2')(net['conv2_1'])
+                                   
+    # 追加                               
+    #net['conv2_2'] = SpatialDropout2D(0.25)(net['conv2_2'])
+    
     net['pool2'] = MaxPooling2D((2, 2), strides=(2, 2), border_mode='same',
                                 name='pool2')(net['conv2_2'])
     # Block 3
@@ -68,6 +99,10 @@ def SSD300(input_shape, num_classes=21):
                                    activation='relu',
                                    border_mode='same',
                                    name='conv3_3')(net['conv3_2'])
+                                   
+    # 追加                               
+    #net['conv3_3'] = SpatialDropout2D(0.25)(net['conv3_3'])
+    
     net['pool3'] = MaxPooling2D((2, 2), strides=(2, 2), border_mode='same',
                                 name='pool3')(net['conv3_3'])
     # Block 4
@@ -75,14 +110,25 @@ def SSD300(input_shape, num_classes=21):
                                    activation='relu',
                                    border_mode='same',
                                    name='conv4_1')(net['pool3'])
+                                   
+    # 追加                               
+    #net['conv4_1'] = SpatialDropout2D(0.25)(net['conv4_1'])
+    
     net['conv4_2'] = Convolution2D(512, 3, 3,
                                    activation='relu',
                                    border_mode='same',
                                    name='conv4_2')(net['conv4_1'])
+    # 追加                               
+    #net['conv4_2'] = SpatialDropout2D(0.25)(net['conv4_2'])
+    
     net['conv4_3'] = Convolution2D(512, 3, 3,
                                    activation='relu',
                                    border_mode='same',
                                    name='conv4_3')(net['conv4_2'])
+    
+    # 追加                               
+    #net['conv4_3'] = SpatialDropout2D(0.25)(net['conv4_3'])
+    
     net['pool4'] = MaxPooling2D((2, 2), strides=(2, 2), border_mode='same',
                                 name='pool4')(net['conv4_3'])
     # Block 5
@@ -98,16 +144,28 @@ def SSD300(input_shape, num_classes=21):
                                    activation='relu',
                                    border_mode='same',
                                    name='conv5_3')(net['conv5_2'])
+                                   
+    # 追加                               
+    net['conv5_3'] = SpatialDropout2D(0.25)(net['conv5_3'])
+    
     net['pool5'] = MaxPooling2D((3, 3), strides=(1, 1), border_mode='same',
                                 name='pool5')(net['conv5_3'])
     # FC6
     net['fc6'] = AtrousConvolution2D(1024, 3, 3, atrous_rate=(6, 6),
                                      activation='relu', border_mode='same',
                                      name='fc6')(net['pool5'])
+                                     
+    # 追加                               
+    #net['fc6'] = Dropout(0.5)(net['fc6'])
+    
     # x = Dropout(0.5, name='drop6')(x)
     # FC7
     net['fc7'] = Convolution2D(1024, 1, 1, activation='relu',
                                border_mode='same', name='fc7')(net['fc6'])
+                               
+    # 追加                               
+    #net['fc7'] = Dropout(0.25)(net['fc7'])    
+    
     # x = Dropout(0.5, name='drop7')(x)
     # Block 6
     net['conv6_1'] = Convolution2D(256, 1, 1, activation='relu',
@@ -241,7 +299,7 @@ def SSD300(input_shape, num_classes=21):
     priorbox = PriorBox(img_size, 276.0, max_size=330.0, aspect_ratios=[2, 3],
                         variances=[0.1, 0.1, 0.2, 0.2],
                         name='pool6_mbox_priorbox')
-    if K.image_dim_ordering() == 'tf':
+    if K.image_data_format() == 'channels_last':
         target_shape = (1, 1, 256)
     else:
         target_shape = (256, 1, 1)
@@ -249,27 +307,27 @@ def SSD300(input_shape, num_classes=21):
                                     name='pool6_reshaped')(net['pool6'])
     net['pool6_mbox_priorbox'] = priorbox(net['pool6_reshaped'])
     # Gather all predictions
-    net['mbox_loc'] = merge([net['conv4_3_norm_mbox_loc_flat'],
+    net['mbox_loc'] = concatenate([net['conv4_3_norm_mbox_loc_flat'],
                              net['fc7_mbox_loc_flat'],
                              net['conv6_2_mbox_loc_flat'],
                              net['conv7_2_mbox_loc_flat'],
                              net['conv8_2_mbox_loc_flat'],
                              net['pool6_mbox_loc_flat']],
-                            mode='concat', concat_axis=1, name='mbox_loc')
-    net['mbox_conf'] = merge([net['conv4_3_norm_mbox_conf_flat'],
+                             axis=1, name='mbox_loc')
+    net['mbox_conf'] = concatenate([net['conv4_3_norm_mbox_conf_flat'],
                               net['fc7_mbox_conf_flat'],
                               net['conv6_2_mbox_conf_flat'],
                               net['conv7_2_mbox_conf_flat'],
                               net['conv8_2_mbox_conf_flat'],
                               net['pool6_mbox_conf_flat']],
-                             mode='concat', concat_axis=1, name='mbox_conf')
-    net['mbox_priorbox'] = merge([net['conv4_3_norm_mbox_priorbox'],
+                              axis=1, name='mbox_conf')
+    net['mbox_priorbox'] = concatenate([net['conv4_3_norm_mbox_priorbox'],
                                   net['fc7_mbox_priorbox'],
                                   net['conv6_2_mbox_priorbox'],
                                   net['conv7_2_mbox_priorbox'],
                                   net['conv8_2_mbox_priorbox'],
                                   net['pool6_mbox_priorbox']],
-                                 mode='concat', concat_axis=1,
+                                 axis=1,
                                  name='mbox_priorbox')
     if hasattr(net['mbox_loc'], '_keras_shape'):
         num_boxes = net['mbox_loc']._keras_shape[-1] // 4
@@ -281,10 +339,10 @@ def SSD300(input_shape, num_classes=21):
                                name='mbox_conf_logits')(net['mbox_conf'])
     net['mbox_conf'] = Activation('softmax',
                                   name='mbox_conf_final')(net['mbox_conf'])
-    net['predictions'] = merge([net['mbox_loc'],
+    net['predictions'] = concatenate([net['mbox_loc'],
                                net['mbox_conf'],
                                net['mbox_priorbox']],
-                               mode='concat', concat_axis=2,
+                               axis=2,
                                name='predictions')
     model = Model(net['input'], net['predictions'])
     return model
