@@ -1,25 +1,3 @@
-ssd.py
-アクセスできるユーザー
-K
-システム プロパティ
-種類
-テキスト
-サイズ
-15 KB
-使用容量
-30 KB
-パス
-ssd_keras-new
-オーナー
-自分
-最終更新
-2021/07/09（自分）
-最終閲覧
-10:44（自分）
-作成日
-2021/06/18（Google Drive Web を使用）
-説明を追加
-閲覧者はダウンロード可
 """Keras implementation of SSD."""
 
 import keras.backend as K
